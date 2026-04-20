@@ -220,14 +220,17 @@ int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
 {
 	struct tpm_tis_spi_phy *phy = to_tpm_tis_spi_phy(data);
 	struct spi_controller *ctlr = phy->spi_device->controller;
+	struct device_node *ctlr_np = ctlr->dev.of_node;
+	bool k1x_controller = ctlr_np &&
+		of_device_is_compatible(ctlr_np, "spacemit,k1x-spi");
 
 	/*
 	 * TPM flow control over SPI requires full duplex support.
 	 * Send entire message to a half duplex controller to handle
-	 * wait polling in controller.
-	 * Set TPM HW flow control flag..
+	 * wait polling in controller. The SpacemiT K1X SPI controller also
+	 * needs this single-message transfer shape for TPM TIS flow control.
 	 */
-	if (ctlr->flags & SPI_CONTROLLER_HALF_DUPLEX)
+	if ((ctlr->flags & SPI_CONTROLLER_HALF_DUPLEX) || k1x_controller)
 		return tpm_tis_spi_transfer_half(data, addr, len, in, out);
 	else
 		return tpm_tis_spi_transfer_full(data, addr, len, in, out);

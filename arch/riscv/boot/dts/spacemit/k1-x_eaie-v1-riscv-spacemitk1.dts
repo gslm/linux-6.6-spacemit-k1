@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/* Copyright (c) 2023 Spacemit, Inc */
+
+/dts-v1/;
+
+#include "k1-x_deb1-common.dtsi"
+
+/ {
+	model = "eaie-v1-riscv-spacemitk1";
+};
+
+&spi3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ssp3_0>;
+	k1x,ssp-disable-dma;
+	status = "okay";
+	k1x,ssp-clock-rate = <25600000>;
+
+	/*
+	 * SLB9670 TPM2 module on the native SPI3 chip select exposed on
+	 * physical header pin 24. Reset and IRQ are left to the module straps
+	 * for the current bring-up stage.
+	 */
+	tpm@0 {
+		compatible = "infineon,slb9670";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+		status = "okay";
+	};
+};
