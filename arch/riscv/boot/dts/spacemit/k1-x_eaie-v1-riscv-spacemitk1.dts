@@ -4,9 +4,39 @@
 /dts-v1/;
 
 #include "k1-x_deb1-common.dtsi"
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	model = "eaie-v1-riscv-spacemitk1";
+};
+
+&i2c4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c4_2>;
+	status = "okay";
+
+	oled@3c {
+		compatible = "solomon,ssd1306";
+		reg = <0x3c>;
+		solomon,width = <128>;
+		solomon,height = <64>;
+		solomon,com-invdir;
+		status = "disabled";
+	};
+
+	/*
+	 * MPU6050 6-axis IMU on the same AP_I2C4 bus previously used by the
+	 * OLED test display. This first bring-up pass assumes the common
+	 * 0x68 address and routes the sensor INT pin to GPIO_71_3v3 on
+	 * physical header pin 11.
+	 */
+	imu@68 {
+		compatible = "invensense,mpu6050";
+		reg = <0x68>;
+		interrupt-parent = <&gpio>;
+		interrupts = <71 IRQ_TYPE_EDGE_RISING>;
+		status = "okay";
+	};
 };
 
 &spi3 {
