@@ -1,0 +1,486 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/* EAIE v2 (SMARC-2.1 SoM + baseboard + NTN NIC), SpacemiT K1.
+ *
+ * Override profile for the August-2026 hardware revision.  Do NOT use with the
+ * earlier EAIE wiring -- that board is k1-x_eaie-v1-riscv-spacemitk1.dts.
+ * Derived from the reviewed R2 profile; the annotated provenance version, with
+ * every decision traced to a schematic page, is kept out of tree at
+ * ai-agents/ELI-dts-review/comparison/k1-x_eaie-v1-R2-independant.dts */
+
+/dts-v1/;
+
+#include "k1-x_deb1-common.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	model = "eaie-v2-riscv-spacemitk1";
+
+	modules_usrload = "bcmdhd";
+
+	leds {
+		status = "disabled";
+	};
+
+	/*
+	 * ---------------------------------------------------------------------
+	 * Camera on CN12 (22-pin MIPI-CSI).  Added 2026-08-29.
+	 * ---------------------------------------------------------------------
+	 * CN12 is a Raspberry-Pi-pinout 22-pin FFC (Molex 54548-2272, 0.5 mm, RA,
+	 * bottom contact): 4 data lanes + clock from SoM MIPI CSI1, N on the even
+	 * pins, POWER-EN on pin 17, I2C on 20/21, +V_CSI 3.3 V on pin 22.
+	 * Pin 18 (LED / XCLK) is NC -- harmless: it is the LED line on RPi Camera
+	 * v2-class modules, and those modules carry their own oscillator.
+	 */
+
+	/*
+	 * Stand-in for the camera module's own 24 MHz crystal.  No MCLK is routed
+	 * to CN12, but the upstream imx219 driver refuses to probe unless it sees
+	 * a clock of exactly 24 MHz (drivers/media/i2c/imx219.c: IMX219_XCLK_FREQ).
+	 */
+	cam_xclk: cam-xclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
+
+	/*
+	 * NOTE the naming: +V_CSI itself is NOT gated -- it is hardwired from
+	 * +3V3_SYS via R132 (0R) to CN12 pin 22.  What expander line P7 drives,
+	 * through the TXS0104, is CN12 pin 17: the MODULE's active-high enable
+	 * (RPi CAM_IO0 semantics), which switches the LDOs on the camera board.
+	 * R154 pulls it up, so the module is enabled by default; modelling it as
+	 * a regulator is behaviourally correct (it is how RPi models module
+	 * power) and lets software switch it.  The module regulates its own
+	 * 2.8 / 1.8 / 1.2 V rails from the single 3.3 V input.
+	 */
+	reg_csi_3v3: regulator-csi-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "v-csi-3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&ioexp_b 7 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+
+	vcc3v3_sd: vcc3v3-sd {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc3v3_sd";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&dc_12v>;
+	};
+};
+
+&pinctrl {
+	pinctrl-single,gpio-range = <
+		&range GPIO_25  3 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_40  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_44  1 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_50  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_3V_DS4)
+		&range GPIO_58  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_63  2 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_65  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_67  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_3V_DS4)
+		&range PRI_TDI  2 (MUX_MODE1 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range PRI_TCK  1 (MUX_MODE1 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range PRI_TDO  1 (MUX_MODE1 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_74  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_80  1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_3V_DS4)
+		&range GPIO_83  2 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_90  1 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_91  2 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range DVL0     1 (MUX_MODE1 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range DVL1     1 (MUX_MODE1 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS0)
+		&range QSPI_CLK 1 (MUX_MODE1 | EDGE_NONE | PULL_UP   | PAD_3V_DS4)
+		&range GPIO_110 1 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_114 1 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_115 1 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+		&range GPIO_116 1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_118 1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_123 1 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS0)
+		&range GPIO_124 1 (MUX_MODE0 | EDGE_NONE | PULL_UP   | PAD_1V8_DS2)
+		&range GPIO_125 3 (MUX_MODE0 | EDGE_NONE | PULL_DOWN | PAD_1V8_DS2)
+	>;
+
+	pinctrl_uart1_eaie: uart1_eaie_grp {
+		pinctrl-single,pins = <
+			K1X_PADCONF(GPIO_29, MUX_MODE2, (EDGE_NONE | PULL_UP | PAD_1V8_DS2))	/* uart1_txd   AA20 */
+			K1X_PADCONF(GPIO_30, MUX_MODE2, (EDGE_NONE | PULL_UP | PAD_1V8_DS2))	/* uart1_rxd   AD19 */
+			K1X_PADCONF(GPIO_31, MUX_MODE2, (EDGE_NONE | PULL_UP | PAD_1V8_DS2))	/* uart1_cts_n AC20 */
+			K1X_PADCONF(GPIO_32, MUX_MODE2, (EDGE_NONE | PULL_UP | PAD_1V8_DS2))	/* uart1_rts_n AA19 */
+		>;
+	};
+
+	pinctrl_uart3_eaie: uart3_eaie_grp {
+		pinctrl-single,pins = <
+			K1X_PADCONF(GPIO_81, MUX_MODE2, (EDGE_NONE | PULL_UP | PAD_1V8_DS2))	/* uart3_txd AE9 */
+			K1X_PADCONF(GPIO_82, MUX_MODE2, (EDGE_NONE | PULL_UP | PAD_1V8_DS2))	/* uart3_rxd AF7 */
+		>;
+	};
+
+	pinctrl_wlan_wakeup_eaie: wlan_wakeup_eaie_grp {
+		pinctrl-single,pins = <
+			K1X_PADCONF(GPIO_43, MUX_MODE0, (EDGE_RISE | PULL_DOWN | PAD_1V8_DS2))	/* WL_HOST_WAKE AC23 */
+		>;
+	};
+
+	pinctrl_imu_int_eaie: imu_int_eaie_grp {
+		pinctrl-single,pins = <
+			K1X_PADCONF(GPIO_41, MUX_MODE0, (EDGE_NONE | PULL_DOWN | PAD_1V8_DS2))	/* IMU_INT1 AB21 */
+			K1X_PADCONF(GPIO_42, MUX_MODE0, (EDGE_NONE | PULL_DOWN | PAD_1V8_DS2))	/* IMU_INT2 AC22 */
+		>;
+	};
+
+	pinctrl_tpm_irq_eaie: tpm_irq_eaie_grp {
+		pinctrl-single,pins = <
+			K1X_PADCONF(GPIO_49, MUX_MODE0, (EDGE_NONE | PULL_UP | PAD_3V_DS4))	/* TPM_PIRQ AF13 */
+		>;
+	};
+};
+
+&gpio {
+	gpio-ranges = <
+		&pinctrl 25  GPIO_25  3
+		&pinctrl 40  GPIO_40  1
+		&pinctrl 44  GPIO_44  1
+		&pinctrl 50  GPIO_50  1
+		&pinctrl 58  GPIO_58  1
+		&pinctrl 63  GPIO_63  3
+		&pinctrl 67  GPIO_67  1
+		&pinctrl 70  PRI_TDI  4
+		&pinctrl 74  GPIO_74  1
+		&pinctrl 80  GPIO_80  1
+		&pinctrl 83  GPIO_83  2
+		&pinctrl 90  GPIO_90  3
+		&pinctrl 96  DVL0     2
+		&pinctrl 102 QSPI_CLK 1
+		&pinctrl 110 GPIO_110 1
+		&pinctrl 114 GPIO_114 3
+		&pinctrl 118 GPIO_118 1
+		&pinctrl 123 GPIO_123 5
+	>;
+
+	tpm-rst-hog {
+		gpio-hog;
+		gpios = <50 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "TPM_RST";
+	};
+
+	imu-cs-hog {
+		gpio-hog;
+		gpios = <40 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "IMU_CS";
+	};
+
+	bt-wake-hog {
+		gpio-hog;
+		gpios = <26 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "BT_WAKE";
+	};
+};
+
+&rf_pwrseq {
+	/delete-property/ pwr-gpios;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_32k_out_2>;
+};
+
+&wlan_pwrseq {
+	regon-gpios = <&gpio 44 GPIO_ACTIVE_HIGH>;
+	interrupts = <176>;
+	pinctrl-0 = <&pinctrl_wlan_wakeup_eaie>;
+};
+
+&bt_pwrseq {
+	reset-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1_eaie>;
+	status = "okay";
+};
+
+&uart3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart3_eaie>;
+	status = "okay";
+};
+
+&uart4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4_3>;
+	status = "okay";
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
+	status = "okay";
+
+	/*
+	 * CAMERA PATH A -- interface validation only.  DISABLED.
+	 *
+	 * Sony IMX219 (Raspberry Pi Camera v2 / "Pi 5 8MP" module) on CN12.
+	 * A successful probe proves the CN12 pinout and orientation, the +V_CSI
+	 * rail, the MIPI_POWER_EN path, the level shifter and the whole I2C route
+	 * (the driver reads chip ID 0x0219 from register 0x0000).
+	 * It does NOT produce frames: SpacemiT's CSI receiver has no v4l2-async
+	 * binding, so the subdev this driver registers is never claimed by the
+	 * ISP pipeline.  For frames use PATH B below.
+	 *
+	 * Needs CONFIG_VIDEO_IMX219=m (the driver is in-tree; not in k1_defconfig).
+	 * All three supplies point at the same 3.3 V rail because the module
+	 * regulates internally.
+	 */
+	imx219: camera@10 {
+		compatible = "sony,imx219";
+		reg = <0x10>;
+		status = "disabled";	/* PATH B is the live path -- see below */
+		clocks = <&cam_xclk>;
+		VANA-supply = <&reg_csi_3v3>;
+		VDIG-supply = <&reg_csi_3v3>;
+		VDDL-supply = <&reg_csi_3v3>;
+
+		port {
+			imx219_out: endpoint {
+				data-lanes = <1 2>;	/* module is 2-lane; CN12 routes 4 */
+				link-frequencies = /bits/ 64 <456000000>;
+			};
+		};
+	};
+};
+
+&i2c2 {
+	status = "disabled";
+};
+
+&es8326 {
+	status = "disabled";
+};
+
+&i2c3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c3_0>;
+	status = "okay";
+
+	imu@6a {
+		compatible = "st,lsm6dsox";
+		reg = <0x6a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_imu_int_eaie>;
+		interrupt-parent = <&gpio>;
+		interrupts = <41 IRQ_TYPE_EDGE_RISING>;	/* INT1 -> GPIO_41; INT2 -> GPIO_42 unused */
+	};
+
+	ioexp_a: gpio@20 {
+		compatible = "ti,tca6408";
+		reg = <0x20>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-line-names = "CN7_IO_P0", "CN7_IO_P1", "CN7_IO_P2", "CN7_IO_P3",
+				  "CN7_IO_P4", "CN7_IO_P5", "CN7_IO_P6", "CN7_IO_P7";
+	};
+
+	ioexp_b: gpio@21 {
+		compatible = "ti,tca6408";
+		reg = <0x21>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-line-names = "MOD_A_SW_RST", "MOD_A_SIM2_DET", "MOD_A_PWR_ON",
+				  "MOD_B_SW_RST", "MOD_B_SIM2_DET", "MOD_B_PWR_ON",
+				  "RS485_CONTROL", "MIPI_POWER_EN";
+
+		mod-a-pwr-on-hog {
+			gpio-hog;
+			gpios = <2 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "MOD_A_PWR_ON";
+		};
+
+		mod-a-sw-rst-hog {
+			gpio-hog;
+			gpios = <0 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "MOD_A_SW_RST";
+		};
+
+		mod-b-pwr-on-hog {
+			gpio-hog;
+			gpios = <5 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "MOD_B_PWR_ON";
+		};
+
+		mod-b-sw-rst-hog {
+			gpio-hog;
+			gpios = <3 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "MOD_B_SW_RST";
+		};
+	};
+};
+
+&i2c8 {
+	eaie_eeprom: eeprom@50 {
+		compatible = "atmel,24c02";
+		reg = <0x50>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		read-only;
+		power-domains = <&power K1X_PMU_DUMMY_PWR_DOMAIN>;
+		status = "okay";
+
+		eaie_mac0: mac-address@0 {
+			reg = <0x0 6>;
+		};
+
+		eaie_mac1: mac-address@6 {
+			reg = <0x6 6>;
+		};
+	};
+};
+
+&spi3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ssp3_0>;
+	k1x,ssp-disable-dma;
+	k1x,ssp-clock-rate = <25600000>;
+	status = "okay";
+
+	tpm@0 {
+		compatible = "infineon,slb9670";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_tpm_irq_eaie>;
+		interrupt-parent = <&gpio>;
+		interrupts = <49 IRQ_TYPE_EDGE_FALLING>;
+		status = "okay";
+	};
+};
+
+&qspi {
+	status = "disabled";
+};
+
+&sdhci0 {
+	vmmc-supply = <&vcc3v3_sd>;
+};
+
+&eth0 {
+	nvmem-cells = <&eaie_mac0>;
+	nvmem-cell-names = "mac-address";
+};
+
+&eth1 {
+	status = "disabled";
+};
+
+&usb3hub {
+	/delete-property/ hub-gpios;
+	/delete-property/ vbus-gpios;
+	status = "disabled";
+};
+
+&pcie1_rc {
+	num-lanes = <1>;
+	k1x,pwr_on = <&gpio 84 GPIO_ACTIVE_HIGH>;
+};
+
+&pcie2_rc {
+	pinctrl-0 = <&pinctrl_pcie2_3>;
+	num-lanes = <1>;
+	k1x,pwr_on = <&gpio 83 GPIO_ACTIVE_HIGH>;
+};
+
+&flexcan0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_can_1>;
+	status = "okay";
+};
+
+&pwm14 {
+	status = "disabled";
+};
+
+&pwm_bl {
+	status = "disabled";
+};
+
+&i2s0 {
+	status = "disabled";
+};
+
+&sound_codec {
+	status = "disabled";
+};
+
+/*
+ * CAMERA PATH B -- the route to actual frames.  ENABLED.
+ *
+ * SpacemiT does not bind sensor drivers: vi/k1xvi.c creates *virtual* sensor
+ * entities and the real sensor is driven from userspace through this node's
+ * /dev/cam_sensorN character device (I2C burst read/write + power ioctls).
+ * The driver is sensor-agnostic -- there are no per-sensor kernel files -- so
+ * the IMX219 is already supported by the vendor userspace: libcam_sensors.so
+ * registers imx219_spm_Obj/imx219Obj (see cam_sensors_module_list.h in the
+ * rootfs).  One mode is populated: 1920x1080 10-bit 30 fps, 2 lanes, I2C 0x10.
+ *
+ * To switch back: status = "disabled" here AND "okay" on camera@10 above.
+ * Never enable both -- they would fight over the same I2C device.
+ *
+ * Reuses the inherited BPI-F3 cam_sensor@0 node with its specifics removed:
+ *   twsi-index 0 -> 1  : the camera bus on EAIE is AP_I2C1 (GPIO_56/57).
+ *   dphy-index  = 0    : SoM routes "MIPI CSI1"; csiphy0 is the PHY clocked by
+ *                        CLK_CCIC1PHY and is enabled by the base profile.
+ *                        VERIFY at bring-up (alternatives: 1, 2).
+ *   clocks/clock-names : INHERITED, deliberately not deleted -- the driver
+ *                        must acquire a clock or the MCLK ioctls return
+ *                        -EINVAL.  See the note in the node below.
+ *   pwdn/reset-gpios   : DELETED -- the inherited values are GPIO_113/111,
+ *                        which are the PCIe2 sideband pads on EAIE.  Leaving
+ *                        them would break M.2 slot A.  CN12 has no reset line.
+ *   clocks, pinctrl    : DELETED -- meaningless with mclk-disable, and
+ *                        pinctrl_camera1 would collide with GPIO_58.
+ */
+&backsensor {
+	twsi-index = <1>;
+	dphy-index = <0>;
+
+	/*
+	 * MCLK: KEEP the inherited clocks/clock-names (<&ccu CLK_CAMM0>,
+	 * "cam_mclk0") -- do NOT use mclk-disable.  The camera module
+	 * self-clocks from its own 24 MHz oscillator and the K1 CAM_MCLK pads
+	 * are NC on EAIE, so this clock physically drives nothing.  But the
+	 * driver must still ACQUIRE it: with mclk-disable, cam_sensor.c:1427
+	 * leaves msnr_dev->mclk NULL, and camsnr_set_mclk_rate() /
+	 * camsnr_set_mclk_enable() (cam_sensor.c:400-455) do not consult
+	 * dis_mclk -- they test the pointer and return -EINVAL, which
+	 * libcam_sensors logs at error level ("sensor%d set mclk enable
+	 * [%d] failed").  GPIO_53 (CAM_MCLK0) is NC on EAIE per the netlist,
+	 * so the inherited pinctrl_camera0 mux costs us nothing.
+	 */
+
+	/delete-property/ pwdn-gpios;
+	/delete-property/ reset-gpios;
+	/delete-property/ af_2v8-supply;
+	/delete-property/ dvdd_1v2-supply;
+
+	avdd_2v8-supply = <&reg_csi_3v3>;
+	dovdd_1v8-supply = <&reg_csi_3v3>;
+
+	status = "okay";
+};
