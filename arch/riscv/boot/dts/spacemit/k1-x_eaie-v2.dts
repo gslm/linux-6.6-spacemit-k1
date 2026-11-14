@@ -376,8 +376,35 @@
 	status = "disabled";
 };
 
+/*
+ * microSD is 3.3 V-only on EAIE: CMD/DAT0-3 carry 47k pull-ups (R83-R87) to the
+ * fixed +3V3_SD rail (baseboard p6), so the MMC1 pad bank must never drop to
+ * 1.8 V UHS signalling (BPI-F3 has no such pull-ups, hence the inherited UHS).
+ *
+ * Pin ALDO1 (ldo_1 = +3V3_MMC1, the MMC1 pad-bank supply, SoM p5/p6) to 3.3 V
+ * and KEEP it as vqmmc: sdhci_setup_host() then sees a vqmmc that cannot do
+ * 1.7-1.95 V and drops SDR50/SDR104/DDR50 (and with them SDR12/SDR25 and
+ * SDHCI_SIGNALING_180) before the card is scanned.  Do NOT delete vqmmc-supply
+ * instead: ldo_1 is boot-on but not always-on and sdhci0 is its only consumer,
+ * so regulator late-cleanup would switch the SD pad bank off ~30 s after boot.
+ * "no-1-8-v" is not used because sdhci-of-k1x never calls sdhci_get_property().
+ * The full UHS caps mask below is a second, driver-specific guard (it also
+ * stops the SDR104 "recovery" path in sdhci-of-k1x.c).
+ */
+&ldo_1 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+};
+
 &sdhci0 {
 	vmmc-supply = <&vcc3v3_sd>;
+	spacemit,sdh-host-caps-disable = <(
+			MMC_CAP_UHS_SDR12 |
+			MMC_CAP_UHS_SDR25 |
+			MMC_CAP_UHS_SDR50 |
+			MMC_CAP_UHS_SDR104 |
+			MMC_CAP_UHS_DDR50
+			)>;
 };
 
 &eth0 {
@@ -453,8 +480,6 @@
  *   pwdn/reset-gpios   : DELETED -- the inherited values are GPIO_113/111,
  *                        which are the PCIe2 sideband pads on EAIE.  Leaving
  *                        them would break M.2 slot A.  CN12 has no reset line.
- *   clocks, pinctrl    : DELETED -- meaningless with mclk-disable, and
- *                        pinctrl_camera1 would collide with GPIO_58.
  */
 &backsensor {
 	twsi-index = <1>;
