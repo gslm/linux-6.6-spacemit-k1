@@ -282,7 +282,14 @@ static int k1x_gpio_probe_dt(struct platform_device *pdev,
 	u32 offset;
 	int i, nbank, ret;
 
-	nbank = of_get_child_count(np);
+	/*
+	 * Child nodes describe the GPIO banks. gpio-hog children are not
+	 * banks: gpiolib applies them after the chip is registered.
+	 */
+	nbank = 0;
+	for_each_child_of_node(np, child)
+		if (!of_property_read_bool(child, "gpio-hog"))
+			nbank++;
 	if (nbank == 0)
 		return -EINVAL;
 
@@ -294,6 +301,8 @@ static int k1x_gpio_probe_dt(struct platform_device *pdev,
 
 	i = 0;
 	for_each_child_of_node(np, child) {
+		if (of_property_read_bool(child, "gpio-hog"))
+			continue;
 		ret = of_property_read_u32(child, "reg-offset", &offset);
 		if (ret) {
 			of_node_put(child);
