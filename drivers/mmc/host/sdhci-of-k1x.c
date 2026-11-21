@@ -1855,8 +1855,13 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 	host->mmc_host_ops.enable_sdio_irq = spacemit_enable_sdio_irq;
 	host->mmc_host_ops.request = spacemit_sdhci_request;
 
-	if (!(host->mmc->caps2 & MMC_CAP2_NO_SDIO)) {
-		/* skip auto rescan */
+	if (!(host->mmc->caps2 & MMC_CAP2_NO_SDIO) && !host->mmc->pwrseq) {
+		/*
+		 * Skip the auto rescan: vendor Wi-Fi drivers power the card and
+		 * trigger the scan themselves (spacemit_sdio_detect_change()).
+		 * A host with an mmc-pwrseq is powered and scanned by the MMC core,
+		 * as mainline drivers such as brcmfmac expect.
+		 */
 		host->mmc->rescan_entered = 1;
 	}
 #if BOOTPART_NOACC_DEFAULT
