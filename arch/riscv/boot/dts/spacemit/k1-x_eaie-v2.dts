@@ -366,8 +366,11 @@
 		spi-max-frequency = <1000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_tpm_irq_eaie>;
-		interrupt-parent = <&gpio>;
-		interrupts = <49 IRQ_TYPE_EDGE_FALLING>;
+		/*
+		 * No interrupt: the K1 GPIO controller detects edges only and
+		 * TPM_PIRQ is a level signal, so interrupts get lost. The driver
+		 * polls the TPM instead.
+		 */
 		status = "okay";
 	};
 };
