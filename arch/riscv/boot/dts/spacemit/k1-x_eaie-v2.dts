@@ -16,7 +16,8 @@
 / {
 	model = "eaie-v2-riscv-spacemitk1";
 
-	modules_usrload = "bcmdhd";
+	/* Loaded at boot by spacemit-modules-usrload (an empty value loads 8852bs). */
+	modules_usrload = "brcmfmac";
 
 	leds {
 		status = "disabled";
@@ -72,6 +73,17 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&dc_12v>;
+	};
+
+	/*
+	 * AP6275S Wi-Fi power sequence for the mainline brcmfmac driver: the MMC
+	 * core holds WL_REG_ON (GPIO_44) low until it powers up the SDIO card,
+	 * then releases it high and waits before the first SDIO command.
+	 */
+	wifi_pwrseq: wifi-pwrseq {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&gpio 44 GPIO_ACTIVE_LOW>;
+		post-power-on-delay-ms = <200>;
 	};
 };
 
@@ -193,10 +205,9 @@
 	pinctrl-0 = <&pinctrl_32k_out_2>;
 };
 
+/* Wi-Fi power is handled by wifi_pwrseq (brcmfmac); the vendor bcmdhd hook is unused. */
 &wlan_pwrseq {
-	regon-gpios = <&gpio 44 GPIO_ACTIVE_HIGH>;
-	interrupts = <176>;
-	pinctrl-0 = <&pinctrl_wlan_wakeup_eaie>;
+	status = "disabled";
 };
 
 &bt_pwrseq {
@@ -412,6 +423,7 @@
 
 /* SDIO Wi-Fi host: SDR104 off (card re-init at 187.5 MHz fails); runs at SDR50. */
 &sdhci1 {
+	mmc-pwrseq = <&wifi_pwrseq>;
 	spacemit,sdh-host-caps-disable = <(
 			MMC_CAP_UHS_DDR50 |
 			MMC_CAP_UHS_SDR104 |
