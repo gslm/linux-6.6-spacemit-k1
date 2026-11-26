@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/* EAIE v2 with CN28 as a serial port (R_UART0, /dev/ttyS10) instead of the SD card.
+ *
+ * CN28 shares its lines with the microSD slot (CN10):
+ *   pin 3 (TX)  = SDMMC_CMD_R = MMC1_CMD, function 3 = R_UART0_TXD (K1 datasheet V7.1, PDF p129)
+ *   pin 2 (GND)
+ *   pin 1 (RX)  = SDMMC_DET   = GPIO_80,  function 4 = R_UART0_RXD (K1 datasheet V7.1, PDF p135)
+ * 3.3 V levels.  The SD card cannot be used with this DTB.
+ *
+ * k1-x_eaie-v2.dtb is the SD card variant.  To switch, copy the wanted DTB over
+ * the DTB file the bootloader loads and reboot.
+ */
+
+#include "k1-x_eaie-v2.dts"
+
+&pinctrl {
+	pinctrl_r_uart0_cn28: r_uart0_cn28_grp {
+		pinctrl-single,pins = <
+			K1X_PADCONF(MMC1_CMD, MUX_MODE3, (EDGE_NONE | PULL_UP | PAD_3V_DS4))	/* r_uart0_txd */
+			K1X_PADCONF(GPIO_80,  MUX_MODE4, (EDGE_NONE | PULL_UP | PAD_3V_DS4))	/* r_uart0_rxd */
+		>;
+	};
+};
+
+/* MMC1_CMD and the card-detect line carry the UART. */
+&sdhci0 {
+	status = "disabled";
+};
+
+/*
+ * MMC1_CMD sits in the SD pad bank (VCC1833_MMC1 = +3V3_MMC1, fed by ALDO1 =
+ * ldo_1).  sdhci0 was the only consumer of ldo_1, so keep it on or the
+ * regulator late-cleanup switches the TX pad off after boot.
+ */
+&ldo_1 {
+	regulator-always-on;
+};
+
+/*
+ * The RCPU node muxes R_UART0 on GPIO_47/48, which are not connected on the
+ * SoM.  Drop that so R_UART0 is muxed on the CN28 pins only.
+ */
+&rcpu {
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+};
+
+&r_uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_r_uart0_cn28>;
+	status = "okay";
+};
