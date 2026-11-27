@@ -46,22 +46,21 @@
 	};
 
 	/*
-	 * NOTE the naming: +V_CSI itself is NOT gated -- it is hardwired from
-	 * +3V3_SYS via R132 (0R) to CN12 pin 22.  What expander line P7 drives,
-	 * through the TXS0104, is CN12 pin 17: the MODULE's active-high enable
-	 * (RPi CAM_IO0 semantics), which switches the LDOs on the camera board.
-	 * R154 pulls it up, so the module is enabled by default; modelling it as
-	 * a regulator is behaviourally correct (it is how RPi models module
-	 * power) and lets software switch it.  The module regulates its own
-	 * 2.8 / 1.8 / 1.2 V rails from the single 3.3 V input.
+	 * +V_CSI is not gated: it is hardwired from +3V3_SYS via R132 (0R) to
+	 * CN12 pin 22, so this is a plain always-on rail.  The module regulates
+	 * its own 2.8 / 1.8 / 1.2 V rails from the single 3.3 V input.
+	 *
+	 * Expander line P7 (MIPI_POWER_EN, through the TXS0104) drives CN12
+	 * pin 17, the module's active-high enable (RPi CAM_IO0).  It is owned
+	 * by &backsensor as pwdn-gpios, because the vendor cam_sensor driver
+	 * needs a pwdn or reset line to probe.  R154 pulls it up.
 	 */
 	reg_csi_3v3: regulator-csi-3v3 {
 		compatible = "regulator-fixed";
 		regulator-name = "v-csi-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&ioexp_b 7 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
+		regulator-always-on;
 		regulator-boot-on;
 	};
 
@@ -501,9 +500,13 @@
  *   clocks/clock-names : INHERITED, deliberately not deleted -- the driver
  *                        must acquire a clock or the MCLK ioctls return
  *                        -EINVAL.  See the note in the node below.
- *   pwdn/reset-gpios   : DELETED -- the inherited values are GPIO_113/111,
- *                        which are the PCIe2 sideband pads on EAIE.  Leaving
- *                        them would break M.2 slot A.  CN12 has no reset line.
+ *   pwdn-gpios         : expander P7 (CN12 pin 17, module enable).  The
+ *                        driver fails probe without pwdn or reset; it drives
+ *                        pwdn high on power-on and low on power-off
+ *                        (cam_sensor.c:120-140).  The inherited GPIO_113 is
+ *                        a PCIe2 sideband pad on EAIE.
+ *   reset-gpios        : DELETED -- the inherited GPIO_111 is a PCIe2
+ *                        sideband pad on EAIE.  CN12 has no reset line.
  */
 &backsensor {
 	twsi-index = <1>;
@@ -523,7 +526,7 @@
 	 * so the inherited pinctrl_camera0 mux costs us nothing.
 	 */
 
-	/delete-property/ pwdn-gpios;
+	pwdn-gpios = <&ioexp_b 7 GPIO_ACTIVE_HIGH>;
 	/delete-property/ reset-gpios;
 	/delete-property/ af_2v8-supply;
 	/delete-property/ dvdd_1v2-supply;
